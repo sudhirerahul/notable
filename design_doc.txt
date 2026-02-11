@@ -1,0 +1,127 @@
+This document outlines the technical and experiential architecture of the **AI Meeting-to-Task Scheduler**, reimagined with the high-fidelity, minimalist aesthetics of the **Perplexity Comet** design language: deep obsidian backgrounds, ethereal neon accents, and streamlined data visualization.
+
+---
+
+## 1. Technical Specifications
+
+### Conceptual System Architecture
+
+The platform operates on a **distributed microservices architecture** optimized for high-concurrency LLM processing and real-time calendar synchronization.
+
+* **Ingestion Service:** Handles secure transcript uploads and webhooks from Zoom/Teams.
+* **Extraction Service:** Orchestrates LLM chains to parse unstructured text into structured JSON.
+* **Scheduler Service:** A greedy-logic engine that interfaces with OAuth-protected calendars.
+* **Infrastructure:** A **PostgreSQL** core for relational persistence, paired with **Redis** for the asynchronous job queue.
+
+### Sequence Flow
+
+The journey from raw audio to a booked calendar slot follows a strict asynchronous pipeline:
+
+```mermaid
+graph LR
+    A[User] -->|Upload| B(API Gateway)
+    B -->|Enqueue| C{Job Queue}
+    C -->|Process| D[LLM Service]
+    D -->|Store| E[(PostgreSQL)]
+    E -->|Trigger| F[Scheduler]
+    F -->|Sync| G[Calendar API]
+    G -->|Notify| A
+
+```
+
+### API Definitions (The "Comet" Interface)
+
+We provide a unified **GraphQL** endpoint for frontend agility and a **REST** layer for external integrations.
+
+> **Mutation: Extract Tasks**
+> ```graphql
+> mutation {
+>   extractTasks(input: { transcript: "...", title: "Q3 Strategy" }) {
+>     tasks {
+>       id
+>       title
+>       confidence
+>       suggestedSlot
+>     }
+>   }
+> }
+> 
+> ```
+> 
+> 
+
+---
+
+## 2. UI/UX Flow: The Obsidian Interface
+
+The user experience centers on **transparency and control**, utilizing a dark-themed "Bento box" layout to categorize meeting insights.
+
+1. **The Intake:** A drag-and-drop zone with a subtle "comet-tail" loading animation.
+2. **The Review:** Tasks are presented as cards with **Dynamic Confidence Badges**:
+* **High ():** Radiant Emerald.
+* **Medium ():** Amber Glow.
+* **Low ():** Crimson Pulse (requires manual verification).
+
+
+3. **The Timeline:** A sidebar calendar view allowing users to drag "Proposed Tasks" into "Available Slots" with magnetic snapping.
+
+---
+
+## 3. LLM Extraction Logic
+
+### Intelligent Chunking
+
+To bypass context window limitations (e.g., GPT-4's token caps), we utilize a **Sliding Window with Overlap** strategy.
+
+* **Window Size:** 2,000 tokens.
+* **Overlap:** 200 tokens (to prevent task fragmentation).
+* **Post-Process:** A recursive "Map-Reduce" step merges duplicate tasks identified across different chunks.
+
+### Confidence Scoring
+
+We calculate task reliability using token log-probabilities:
+
+
+
+This mathematical grounding ensures the UI badges reflect actual model certainty.
+
+---
+
+## 4. Scheduling Algorithm: Greedy Optimization
+
+The scheduler employs a **Priority-First Greedy Search** to find the optimal temporal fit.
+
+1. **Sorting:** Tasks are sorted by  and .
+2. **Gap Analysis:** The system identifies "Free Blocks" where .
+3. **Constraint Logic:**
+* **Soft Constraint:** Keep tasks within "Working Hours" (e.g., 09:00 - 17:00).
+* **Hard Constraint:** No overlapping events.
+
+
+
+---
+
+## 5. Integration Ecosystem
+
+| Integration | Protocol | Primary Scope |
+| --- | --- | --- |
+| **Google Calendar** | OAuth 2.0 / REST | `calendar.events.write` |
+| **Slack** | Block Kit / Webhooks | `chat:write` |
+| **Notion** | REST API | `pages.create` |
+| **Linear** | GraphQL | `issueCreate` |
+
+---
+
+## 6. The Tech Stack: "Comet" Edition
+
+| Layer | Technology | Rationale |
+| --- | --- | --- |
+| **Frontend** | React + Tailwind CSS | Ultra-fast, minimalist UI components. |
+| **Backend** | Python (FastAPI) | Native support for AI/NLP libraries and async tasks. |
+| **LLM Engine** | GPT-4o / Claude 3.5 | Industry-leading extraction and reasoning. |
+| **Queue** | Celery + Redis | Handles long-running LLM calls without blocking the UI. |
+| **Hosting** | Vercel (FE) + Fly.io (BE) | Global low-latency edge deployment. |
+
+---
+
+**Would you like me to generate the React component code for the Dark-Themed Task Card with the confidence glow effect?**

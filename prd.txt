@@ -1,0 +1,278 @@
+AI Meeting-to-Task Scheduler – PRD Addendum
+
+1. Technical Specifications
+
+Figure: Conceptual system architecture. The system uses a microservices-based architecture. Key services include Ingestion (handles transcript uploads or webhooks), an Extraction Service (calls the LLM to parse tasks), a Scheduler Service (allocates time slots), and Integration Adapters (Calendar, Slack, Notion, etc.). A central API Gateway/Backend (e.g. GraphQL or REST endpoint) coordinates user requests. A Database (e.g. PostgreSQL) stores users, transcripts, extracted tasks, and scheduling metadata. A Message Queue (e.g. RabbitMQ/SQS) handles long-running jobs asynchronously, and optional Worker processes perform LLM calls and scheduling calculations. For example, a user uploads a transcript to the API, which enqueues a job. A worker pulls the job, sends the text to the LLM, and stores returned tasks. The Scheduler service then queries the user’s calendar (free/busy) and assigns time slots. Each component has a clear responsibility: the API handles authentication and requests; the LLM service produces task JSON; the Scheduler uses calendar APIs to book time; and the DB persists state.
+
+Sequence Flow: User → API Gateway (upload transcript) → Job Queue → LLM Service (extract tasks) → DB & Scheduler → Calendar API (find slots, create events) → DB → API → User. For instance, on transcript submission the backend enqueues an “extract tasks” job; the worker calls extractTasks(transcriptText) via an LLM chain, writes tasks to DB, then invokes the Scheduler to allocate time (see below). A simplified sequence pseudocode is:
+
+User -> API: POST /transcripts
+API -> Queue: enqueue(extract_job)
+Worker -> LLM: extractTasks(transcriptText)
+LLM -> Worker: return [ {title, owner, due, confidence}, … ]
+Worker -> DB: insert(tasks)
+Worker -> Scheduler: schedule(tasks, calendar)
+Scheduler -> Calendar: findFreeSlots(user, tasks[i].deadline)
+Scheduler -> Calendar: insertEvent({start, end, summary, attendees})
+Scheduler -> Worker: return scheduledTasks
+Worker -> DB: update(tasks with scheduled times)
+Worker -> API: notify("tasks ready")
+API -> User: GET /tasks -> [tasks with schedule]
+
+API Definitions: We provide both REST and GraphQL interfaces for flexibility.
+	•	REST Example:
+	•	POST /api/transcripts to submit a meeting transcript:
+
+POST /api/transcripts HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer <token>
+
+{
+  "title": "Sprint Planning (May 1)",
+  "transcript_text": "Alice: We need to release... Bob: I'll take action on..."
+}
+
+Response (202 Accepted): { "transcript_id": "abc123", "status": "processing" }.
+
+	•	GET /api/transcripts/abc123/tasks to retrieve extracted tasks:
+Response (200 OK):
+
+{
+  "transcript_id": "abc123",
+  "tasks": [
+    {
+      "task_id": "t1",
+      "title": "Finalize release notes",
+      "description": "Draft and publish release notes by end of week",
+      "owner": "Alice",
+      "due_date": "2024-05-05T17:00:00-04:00",
+      "confidence": 0.92,
+      "scheduled_time": "2024-05-04T10:00:00-04:00"
+    }
+    // ...
+  ]
+}
+
+
+	•	PATCH /api/tasks/t1 to update a task (e.g. change owner or due date).
+	•	POST /api/schedule with a list of task IDs to trigger (re) scheduling.
+
+	•	GraphQL Example: We define types like type Task { id, title, description, owner, dueDate, confidence, scheduledTime }. A mutation to extract tasks:
+
+mutation {
+  extractTasks(input: { transcriptText: "...", title: "Sprint Planning" }) {
+    transcriptId
+    tasks {
+      id
+      title
+      owner
+      dueDate
+      confidence
+    }
+  }
+}
+
+Response:
+
+{
+  "data": {
+    "extractTasks": {
+      "transcriptId": "abc123",
+      "tasks": [
+        { "id": "t1", "title": "Finalize release notes", "owner": "Alice", "dueDate": "2024-05-05T17:00:00-04:00", "confidence": 0.92 },
+        // ...
+      ]
+    }
+  }
+}
+
+
+
+GraphQL is useful since it lets clients fetch exactly needed fields (avoiding over-fetching) and all queries go through a single endpoint ￼ ￼. In this schema, clients could also query the user’s calendar availability or scheduled events, if exposed. REST endpoints would return fixed JSON structures as shown. All endpoints require authentication tokens (OAuth or API keys) and should return errors in standard format (e.g. JSON with error code and message).
+
+2. UI/UX Flow
+
+Figure: Example task-review interface (mockup). The user flow is as follows: (1) Upload/Connect: On first use, the user logs in (OAuth) and connects calendar/Slack. They then upload a meeting transcript (file or paste text) or link a video. A progress indicator or spinner shows extraction in process. (2) Review Tasks: Once tasks are extracted, they appear as a list of cards or a table. Each task card shows title, owner (assign to a person in the meeting), due date (parsed from transcript mentions), and status. Importantly, each card displays a confidence badge (color-coded) indicating LLM confidence: green for high (≥85%), yellow for medium (60–84%), and red for low (<60%) ￼. Hovering or clicking the badge reveals the numeric confidence and any explanatory note. The UI allows the user to edit any field inline (e.g. change owner or deadline) and accept or reject tasks. Actions like “Accept All High-Confidence”, “Reassign Owner”, or “Dismiss Task” are available. (3) Schedule Tasks: After review, the user proceeds to a scheduling view. A sidebar or modal shows each task with a duration estimate (can be auto-set or user-entered). The system suggests time slots: for example, a visual calendar view or simple “Assign” buttons next to each task. The user can drag tasks into calendar time slots or click “Schedule” to let the algorithm auto-assign. (4) Confirmation & Integration: Once tasks are scheduled, a summary screen lists all tasks with their planned time. The user can make final edits or confirm. Finally, tasks are synced: events are created in Google Calendar (one event per task) and notifications are sent via Slack (e.g. a Slack message lists the new tasks with buttons like “View on Calendar” or “Reschedule”).
+
+Key UI components include cards (for tasks), modals or side panels (for editing or adding details), badges (for confidence levels) and tooltips/popovers for extra info ￼. For example, a low-confidence (<60%) task might have a red badge reading “Low confidence – edit needed.” The user clicks it to see suggested text or the part of transcript that generated the task. Design guides recommend these colors and interactive elements: green text or badge for ≥85%, yellow for 60–84%, red for <60% ￼. Users should have clear options to “Accept”, “Edit”, or “Delete” tasks, mirroring common AI feedback patterns ￼. Where possible, show concise snippets (e.g. “Alice: ‘By next Tuesday…’”) to give context. The flow should minimize clicks: after extraction, show all tasks on one page with inline edit, then a single “Schedule All” button that runs the algorithm (with an “Undo/Reschedule” option).
+
+Optional wireframes: an initial Dashboard (upload button, list of recent transcripts), a Task List screen with cards and confidence badges, and a Calendar Assign view. On mobile or Slack, simple views can list tasks with buttons (e.g. Slack Block Kit messages listing tasks with action buttons). Overall, the UX emphasizes transparency (showing confidence) and control (easy editing) in line with AI-interface best practices ￼ ￼.
+
+3. LLM Extraction
+	•	Prompt Templates: We use a system prompt instructing the LLM (e.g. GPT-4) to act as an action-item extractor. For example, the system prompt might say: “You are an assistant that reads meeting transcripts and outputs a JSON list of actionable tasks. For each task include title, description, owner (person responsible), and due_date if mentioned.” The user prompt then provides the raw transcript. The LLM is guided to return output in a strict key-value format (e.g. JSON), enabling programmatic parsing. Following [46], structuring output as JSON key-value pairs helps associate log-probabilities for confidence scoring ￼. Example user prompt:
+
+SYSTEM: Identify all tasks from the following meeting. Output JSON array with {title, owner, due_date}.
+USER: "Alice: We should finalize the design specs by Friday..." 
+
+The LLM might respond:
+
+[
+  {
+    "title": "Finalize design specs",
+    "description": "Create final design specification document",
+    "owner": "Alice",
+    "due_date": "2024-05-05"
+  }
+  // ...
+]
+
+
+	•	Chunking Logic: Transcripts can be very long (thousands of words). LLMs have token limits (e.g. GPT-4’s 8k context). We chunk the transcript intelligently to avoid exceeding these limits ￼. For example, split by speaker turns, timestamps, or paragraph so each prompt fits within, say, 2000 tokens. Avoid cutting in the middle of a sentence or task. Each chunk is sent to the LLM sequentially (with the same prompt instructions), and partial outputs are concatenated. Because processing in chunks risks splitting an action item across boundaries, we add slight overlaps or use an initial high-level summary step. We may first ask the LLM to produce an outline (1-2 sentences) per chunk, then a second pass to extract tasks from combined outlines. In all cases, use a buffer so no important information is lost. This approach follows best practices for long documents ￼.
+	•	Tokenization: We use the OpenAI tokenizer to estimate tokens. If using GPT-4-8k (context=8192 tokens), we leave a safety margin (e.g. 6000 tokens) per chunk to allow prompt and output. For very long meetings, we might queue multiple jobs or switch to GPT-4-32k if available.
+	•	Postprocessing Pipeline: Once the raw LLM output (likely JSON) is returned, we perform:
+	1.	JSON Parsing & Validation: Parse the text to JSON. If parsing fails (e.g. malformed), retry or switch to a more permissive parsing prompt.
+	2.	Name Mapping: Map “owner” names to actual user identities (e.g. Slack user IDs or project members). Use NLP (named-entity recognition) to match names mentioned in transcript to the known participants.
+	3.	Time Parsing: Convert due_date strings into standardized timestamps. We can use libraries like dateparser or chrono to interpret natural language dates (e.g. “next Friday” → actual date in user’s calendar context). Ensure we localize to the correct time zone (using UTC internally).
+	4.	Confidence Scoring: Compute a confidence score for each field or task. A method (as in [46]) is to sum the LLM’s token log-probabilities for each value to get a joint probability per task ￼. We then normalize or map to [0,1]. This per-task confidence is displayed in the UI.
+	5.	Filtering & Formatting: Remove duplicates, merge similar tasks, and apply any business rules (e.g. ignore tasks without an owner).
+	•	Error Handling/Fallback: If the LLM fails (e.g. time-out or gibberish), we fallback to a simpler strategy: call a smaller model (GPT-3.5) or break the transcript into smaller pieces. If even that fails, we can alert the user: “We couldn’t auto-extract tasks from this transcript – please try again or create tasks manually.” For low-confidence outputs (<50%), flag them for mandatory user review. We also log all LLM errors and monitor failure rates.
+
+4. Scheduling Algorithm
+
+The Scheduler must place tasks into the user’s calendar respecting deadlines and availability. Our slot-finding logic is roughly:
+	1.	Sort Tasks by Priority/Deadline: For example, use earliest-deadline-first or user-assigned priority.
+	2.	Check Calendar Availability: Query Google Calendar free/busy for the relevant date range. Represent free intervals in each day.
+	3.	Greedy Slot Filling: For each task in order, try to fit its estimated duration into the earliest free slot before its deadline. A known heuristic is to schedule tasks as they arrive into the smallest fitting free chunk ￼, preserving flexibility. In practice, we find the earliest interval where free_interval.duration >= task.duration.
+	4.	Fallback Rules:
+	•	If no single free block fits the task, split the task: break it into subtasks (e.g. 2-hour task → 2×1hr) and schedule pieces in adjacent slots.
+	•	If splitting still fails or violates the deadline, flag this conflict. The UI can then prompt the user to adjust (e.g. extend deadline or manually place the task).
+	•	If two tasks have clashing deadlines in the same time, raise a conflict: either schedule the higher-priority one and postpone the other, or ask the user to resolve the tie.
+	5.	Edge Cases: Account for day boundaries and working hours. If a user has no more hours before a deadline, either extend out-of-hours (optional) or rollover to the next day. If tasks exceed daily limit, present a “Work time exceeded” warning.
+
+Pseudocode Example:
+
+free_slots = get_free_slots(calendar, start_date, end_date)
+for task in sorted(tasks, key=lambda t: t.deadline):
+    placed = False
+    for slot in free_slots:  # free_slots sorted by start
+        if slot.can_fit(task.duration) and slot.end_time <= task.deadline:
+            assign(task, slot.start)
+            slot.consume(task.duration)
+            placed = True
+            break
+    if not placed:
+        # Try splitting
+        parts = split_task(task)
+        for part in parts:
+            # try to place each part similarly
+            ...
+        if some_parts_unplaced:
+            mark_conflict(task)
+
+Time Zones & Availability: All date/times are stored in UTC. User preferences (profile) include time zone, and we display local times accordingly. When interpreting transcript times (“tomorrow at 3pm”), we assume the meeting’s timezone or user’s default. We handle DST changes by relying on standard time-zone libraries (IANA tz database). For multi-time-zone teams, we schedule tasks in each assignee’s local time. According to best practices, using UTC internally and converting to local time avoids common DST issues ￼. We also respect events marked “Out of Office” or busy on the calendar. If the user’s working hours are defined (e.g. 9am–5pm), we avoid scheduling outside them unless forced by near-deadline conditions.
+
+5. Integrations
+	•	Google Calendar: We use OAuth 2.0 to obtain permission to read/write the user’s calendar. Required scope: https://www.googleapis.com/auth/calendar ￼. After auth, we can list calendars and call the Calendar API. To create events, we use events.insert(), supplying at minimum calendarId, start.dateTime, and end.dateTime as per Google’s docs ￼. For example:
+
+POST https://www.googleapis.com/calendar/v3/calendars/primary/events
+Content-Type: application/json
+Authorization: Bearer <OAuthToken>
+
+{
+  "summary": "Finalize design specs",
+  "description": "Automated from meeting AI",
+  "start": {"dateTime": "2024-05-04T10:00:00-04:00"},
+  "end":   {"dateTime": "2024-05-04T11:00:00-04:00"},
+  "attendees": [{"email": "alice@example.com"}]
+}
+
+We handle rate limits and API errors by exponential backoff. If an event creation fails (e.g. recurring event conflict), we notify the user in-app or via Slack.
+
+	•	Slack: After tasks are confirmed, we send a Slack message summarizing them. We first add the Slack app to the workspace via OAuth (obtaining scopes chat:write, commands, incoming-webhook, etc. as needed). In the OAuth response, Slack will return an incoming_webhook.url ￼. We then POST to this webhook URL with a JSON payload. For example:
+
+{
+  "text": "New tasks from the Sprint Planning meeting:",
+  "blocks": [
+    {
+      "type": "section",
+      "text": { "type": "mrkdwn", "text": "*Finalize design specs* - by <@U1234> (due May 5)" }
+    },
+    {
+      "type": "actions",
+      "elements": [
+        { "type": "button", "text": { "type": "plain_text", "text": "View on Calendar" }, "url": "https://calendar.google.com/..." },
+        { "type": "button", "text": { "type": "plain_text", "text": "Done" }, "action_id": "mark_done" }
+      ]
+    }
+  ]
+}
+
+This uses Slack’s Block Kit for rich formatting ￼. Each block can include buttons or menus. For interactive actions (e.g. “Mark as Done”), we also set up a /slack/actions endpoint to receive payloads. If Slack API calls fail (e.g. missing permission), we fall back to sending a simpler message or logging the error.
+
+	•	Notion (Optional): If the user prefers task management in Notion, we can map each extracted task to a Notion database row. Using Notion’s REST API, we would POST /v1/pages with a JSON body including a database ID and properties (title, select “Status”, date). For example, using a Notion integration token. Error flows should catch permission issues (e.g. missing write access) and notify the user.
+	•	Linear (Optional): For teams using Linear, we use Linear’s GraphQL API. Per Linear docs, issues (tasks) can be created via GraphQL ￼. For example, a mutation like:
+
+mutation {
+  issueCreate(
+    input: {
+      title: "Finalize design specs",
+      teamId: "team123",
+      assigneeId: "user456",
+      dueDate: "2024-05-05"
+    }
+  ) {
+    success
+    issue {
+      identifier
+      title
+    }
+  }
+}
+
+We include a Personal API Key in the HTTP header. Any failures (e.g. invalid team ID) should be caught and reported.
+
+	•	Asana (Optional): Similarly, Asana’s REST API allows POST /tasks with JSON including workspace, assignee, and due_on. For example, using Axios in a backend service:
+
+axios.post('https://app.asana.com/api/1.0/tasks', {
+  workspace: '1234567890',
+  name: 'Finalize design specs',
+  assignee: 'alice@company.com',
+  due_on: '2024-05-05'
+}, { headers: { 'Authorization': 'Bearer <asana_token>' } });
+
+We need tasks:write scope or a valid token. Errors are logged; if Asana is unavailable, we retry or skip with a warning.
+
+	•	Permissions & Fallback: In all integrations, we request minimal scopes (e.g. only calendar edit for Google, only chat write/incoming-webhook for Slack ￼). If a user denies permission or an API call fails, we degrade gracefully: e.g. skip that integration and inform the user (e.g. “Could not post to Slack.”).
+
+6. Metrics & Analytics
+
+We track both user interactions and system health:
+	•	User Events: Example events (to be sent to PostHog/Mixpanel/Amplitude):
+
+Event Name	Payload Example
+transcript_uploaded	{ user_id, transcript_id, word_count, source: "file" }
+tasks_extracted	{ user_id, transcript_id, num_tasks, extraction_time_ms }
+task_reviewed	{ user_id, task_id, action: "edited"/"deleted", confidence }
+tasks_scheduled	{ user_id, job_id, success: true/false }
+integration_clicked	{ user_id, task_id, service: "google_calendar"/"slack", outcome: "success" }
+
+Each payload includes a distinct user ID and timestamp by default. These allow funnel analysis (e.g. how many users upload vs how many schedule tasks). We use a consistent naming convention (capitalization and spaces are discouraged) as advised by analytics best practices. Tools like PostHog or Mixpanel can track these events with JSON payloads (no additional citations needed for this list).
+
+	•	System Metrics: Monitor job latencies (time from transcript upload to tasks returned), LLM call durations, and error rates (e.g. how often extraction yields zero tasks or exceptions occur). Track extraction accuracy via manual QA sampling (e.g. periodically measure % of tasks that required user edits). Scheduler success rate (e.g. % of tasks auto-scheduled vs manual conflict). Use application monitoring (e.g. Prometheus) for service uptime and queue length.
+	•	Suggested Tools: We recommend a product analytics suite. For example, Mixpanel/Amplitude offer rich event querying and user cohort analysis. PostHog is open-source and supports both product analytics and feature flags (and even LLM analytics) ￼. For system logs and errors, use Sentry or similar. Event tracking code should include event name, distinct user ID, timestamp, and key properties (as above).
+
+7. Detailed Tech Stack
+	•	Frontend: React (TypeScript) with a UI framework (e.g. Material-UI or Ant Design for cards/modals/badges). Alternatively, Next.js for server-side rendering if SEO matters (though this is mainly an app). React makes it easy to build dynamic forms (task edits) and integrate with libraries for date-pickers and drag/drop scheduling. We could also consider mobile (React Native) if on-the-go scheduling is needed.
+	•	Backend: Node.js (TypeScript) with Express or NestJS for the API gateway. Node has mature libraries for OAuth, Slack SDK, and scheduling. Alternatively, Python with FastAPI is popular for ML/LLM work (using asyncio, OpenAI Python SDK, dateparser). Both ecosystems work; Node/TypeScript integrates well with GraphQL (Apollo Server) and frontend, whereas Python excels at NLP and has libraries like spaCy for name mapping. Given the LLM focus, Python (e.g. using FastAPI and Celery workers) could be preferable.
+	•	LLM and NLP: OpenAI’s GPT-4 via API (Python/Node wrapper). For on-prem or custom models, one might use Hugging Face Hub or OpenAI fine-tuned models. Use Python for LLM orchestration. For name entity recognition (to map people names), use spaCy or the LLM itself. For date parsing, use dateparser￼.
+	•	Worker/Queue: Celery (Python) or BullMQ (Node) for asynchronous jobs, backed by Redis or RabbitMQ. For example, upload API enqueues a job; a Celery worker processes it (calls LLM, saves results, triggers scheduling). Alternatively, use serverless functions (AWS Lambda / Azure Functions) triggered by messages.
+	•	Database: PostgreSQL for structured data (users, tasks, transcripts). It’s reliable and supports JSON columns if needed. For simpler setup, SQLite (dev) or Supabase (hosted Postgres) can be used. Alternatively, MongoDB could store tasks as documents, but relational is fine here.
+	•	Storage: If transcripts (audio/video) are uploaded, store media in S3 (or similar) and transcripts in DB or file store. Otherwise, if only text is needed, store text in DB (with indexing).
+	•	Hosting:
+	•	Frontend: Vercel or Netlify (great for React/Next.js with global CDN).
+	•	Backend/API: Render.com or Heroku (easy deployment), or Fly.io (good for global low-latency). AWS Elastic Beanstalk or ECS is another option. We could also use a single container on Fly.io if using full-stack (e.g. Remix or Blitz).
+	•	Database: Hosted Postgres (Heroku Postgres, Supabase, or AWS RDS).
+	•	Queue: Redis on Heroku or a managed RabbitMQ.
+	•	LLM service: Cloud functions or a dedicated EC2. If using OpenAI, no hosting needed for model itself.
+For example, one might deploy the API on Render (Node backend + worker dyno) and frontend on Vercel.
+	•	Alternatives & Rationale:
+	•	Language: Python is chosen for its AI/NLP libraries, while Node/TypeScript is chosen for the rest API and GraphQL (with full type safety).
+	•	Frameworks: React for UI (community support), Apollo GraphQL or PostGraphile for API.
+	•	Queue: Celery/RabbitMQ for reliability, though AWS SQS + Lambda is a serverless alternative.
+	•	Hosting: Vercel is ideal for frontend (optimizes Next.js), Render offers easy Docker deploys, Fly.io is low-latency worldwide.
+	•	DB: Postgres is robust; alternatives include Firebase (easier auth) or FaunaDB (serverless SQL).
+	•	Weights: we prioritize rapid development and reliability.
+
+This stack ensures scalability (microservices can scale independently) and developer productivity (common languages and managed services). All choices consider ease of use for AI workflows and modern web development. For deployment, Docker containers on a platform like Render or Fly.io with continuous integration is recommended. Supabase could even serve as both DB and auth backend, simplifying user management.
+
+Sources: We follow API design best practices ￼ ￼ ￼, UX guidelines for AI confidence ￼ ￼, and chunking recommendations for LLMs ￼. The result is an implementation-ready specification for the AI-powered meeting-to-task scheduler.
