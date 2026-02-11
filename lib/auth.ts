@@ -58,5 +58,4 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: 'database',
   },
-  trustHost: true,
 }
