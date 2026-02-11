@@ -24,6 +24,7 @@ export const authOptions: NextAuthOptions = {
           prompt: 'consent',
         },
       },
+      allowDangerousEmailAccountLinking: true,
     }),
   ],
   callbacks: {
