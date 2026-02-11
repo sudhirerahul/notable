@@ -56,7 +56,7 @@ export default function SignInPage() {
 
         {/* Features */}
         <div className="text-center space-y-2">
-          <p className="text-sm text-gray-400">What you'll get:</p>
+          <p className="text-sm text-gray-400">What you&apos;ll get:</p>
           <div className="flex flex-wrap justify-center gap-2 text-xs">
             <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full">
               AI Task Extraction
