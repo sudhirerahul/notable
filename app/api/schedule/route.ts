@@ -25,7 +25,14 @@ export async function POST(request: NextRequest) {
     // Find user and settings
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      include: { settings: true },
+      include: {
+        settings: true,
+        accounts: {
+          where: {
+            provider: 'google',
+          },
+        },
+      },
     })
 
     if (!user) {
@@ -40,12 +47,13 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Get access token (simplified - in production, handle token refresh)
-    const accessToken = (user.googleTokens as any)?.access_token
+    // Get Google access token from Account
+    const googleAccount = user.accounts.find((acc) => acc.provider === 'google')
+    const accessToken = googleAccount?.access_token
 
     if (!accessToken) {
       return NextResponse.json(
-        { error: 'Google Calendar not connected' },
+        { error: 'Google Calendar not connected. Please sign in again.' },
         { status: 400 }
       )
     }
