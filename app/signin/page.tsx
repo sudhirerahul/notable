@@ -1,37 +1,43 @@
 'use client'
 
 import { signIn } from 'next-auth/react'
-import { Sparkles } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
-import { Suspense } from 'react'
+import { Sparkles } from 'lucide-react'
 
-export const dynamic = 'force-dynamic'
-
-function SignInContent() {
+export default function SignInPage() {
   const searchParams = useSearchParams()
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
+  const error = searchParams.get('error')
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-black via-gray-950 to-black flex items-center justify-center px-4">
-      <div className="max-w-md w-full space-y-8">
-        {/* Logo and Title */}
-        <div className="text-center">
-          <div className="flex justify-center mb-4">
-            <div className="h-16 w-16 bg-emerald-500/10 rounded-2xl flex items-center justify-center">
-              <Sparkles className="h-8 w-8 text-emerald-500" />
-            </div>
+      <div className="max-w-md w-full">
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <Sparkles className="h-10 w-10 text-emerald-500" />
+            <span className="text-3xl font-bold text-white">Notable</span>
           </div>
-          <h2 className="text-4xl font-bold text-white mb-2">Welcome to Notable</h2>
-          <p className="text-gray-400">Sign in to start managing your meeting tasks</p>
+          <p className="text-gray-400">
+            AI-powered meeting transcript to task scheduler
+          </p>
         </div>
 
-        {/* Sign In Card */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 space-y-6">
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-8">
+          <h2 className="text-2xl font-bold text-white mb-6 text-center">
+            Sign In
+          </h2>
+
+          {error && (
+            <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+              Authentication error. Please try again.
+            </div>
+          )}
+
           <button
             onClick={() => signIn('google', { callbackUrl })}
             className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-white hover:bg-gray-100 text-gray-900 rounded-lg font-semibold transition-colors"
           >
-            <svg className="h-5 w-5" viewBox="0 0 24 24">
+            <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path
                 fill="currentColor"
                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -52,39 +58,11 @@ function SignInContent() {
             Continue with Google
           </button>
 
-          <div className="text-center text-sm text-gray-500">
-            By signing in, you agree to our Terms of Service and Privacy Policy
-          </div>
-        </div>
-
-        {/* Features */}
-        <div className="text-center space-y-2">
-          <p className="text-sm text-gray-400">What you&apos;ll get:</p>
-          <div className="flex flex-wrap justify-center gap-2 text-xs">
-            <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full">
-              AI Task Extraction
-            </span>
-            <span className="px-3 py-1 bg-cyan-500/10 text-cyan-400 rounded-full">
-              Smart Scheduling
-            </span>
-            <span className="px-3 py-1 bg-purple-500/10 text-purple-400 rounded-full">
-              Calendar Sync
-            </span>
-          </div>
+          <p className="text-gray-500 text-sm text-center mt-6">
+            By signing in, you agree to grant Notable access to your Google Calendar
+          </p>
         </div>
       </div>
     </div>
-  )
-}
-
-export default function SignInPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gradient-to-b from-black via-gray-950 to-black flex items-center justify-center">
-        <div className="text-white">Loading...</div>
-      </div>
-    }>
-      <SignInContent />
-    </Suspense>
   )
 }
