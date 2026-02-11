@@ -43,13 +43,12 @@ export const authOptions: NextAuthOptions = {
       return token
     },
     async redirect({ url, baseUrl }) {
-      const base = getBaseUrl()
       // Allows relative callback URLs
-      if (url.startsWith('/')) return `${base}${url}`
+      if (url.startsWith('/')) return `${baseUrl}${url}`
       // Allows callback URLs on the same origin
-      if (url.startsWith(base)) return url
-      // Default to dashboard
-      return `${base}/dashboard`
+      else if (new URL(url).origin === baseUrl) return url
+      // Default to dashboard for successful sign in
+      return `${baseUrl}/dashboard`
     },
   },
   pages: {
