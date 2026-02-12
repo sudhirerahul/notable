@@ -69,13 +69,19 @@ export async function extractTasks(
         ],
         response_format: { type: 'json_object' },
         temperature: 0.3,
+        logprobs: true,
+        top_logprobs: 5,
       })
 
       const content = response.choices[0]?.message?.content
+      const logprobs = response.choices[0]?.logprobs
       if (!content) continue
 
       const parsed = JSON.parse(content)
       const tasks = parsed.tasks || []
+
+      // Calculate confidence from logprobs
+      const confidence = logprobs ? calculateConfidence(logprobs) : 0.75
 
       for (const task of tasks) {
         allTasks.push({
@@ -83,7 +89,7 @@ export async function extractTasks(
           description: task.description,
           owner: task.owner,
           dueDate: task.due_date ? parseDueDate(task.due_date, meetingContext) : null,
-          confidence: 0.85, // Default confidence, we can enhance this with logprobs
+          confidence: confidence,
           context: task.context,
         })
       }

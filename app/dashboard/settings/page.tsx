@@ -1,12 +1,38 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Loader2 } from 'lucide-react'
 
 export default function SettingsPage() {
   const [slackWebhook, setSlackWebhook] = useState('')
+  const [timeZone, setTimeZone] = useState('America/New_York')
+  const [workingHoursStart, setWorkingHoursStart] = useState(9)
+  const [workingHoursEnd, setWorkingHoursEnd] = useState(17)
+  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    fetchSettings()
+  }, [])
+
+  const fetchSettings = async () => {
+    try {
+      const response = await fetch('/api/settings')
+      const data = await response.json()
+
+      if (data.settings) {
+        setTimeZone(data.settings.timeZone || 'America/New_York')
+        setWorkingHoursStart(data.settings.workingHoursStart || 9)
+        setWorkingHoursEnd(data.settings.workingHoursEnd || 17)
+        setSlackWebhook(data.settings.slackWebhookUrl || '')
+      }
+    } catch (error) {
+      console.error('Error fetching settings:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -14,14 +40,36 @@ export default function SettingsPage() {
     setMessage('')
 
     try {
-      // In a real implementation, save settings to database
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const response = await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          timeZone,
+          workingHoursStart,
+          workingHoursEnd,
+          slackWebhookUrl: slackWebhook || null,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to save settings')
+      }
+
       setMessage('Settings saved successfully!')
+      setTimeout(() => setMessage(''), 3000)
     } catch (error) {
       setMessage('Failed to save settings')
     } finally {
       setSaving(false)
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+      </div>
+    )
   }
 
   return (
@@ -63,20 +111,32 @@ export default function SettingsPage() {
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Start Time
               </label>
-              <select className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white">
-                <option>9:00 AM</option>
-                <option>8:00 AM</option>
-                <option>10:00 AM</option>
+              <select
+                value={workingHoursStart}
+                onChange={(e) => setWorkingHoursStart(Number(e.target.value))}
+                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white"
+              >
+                {Array.from({ length: 24 }, (_, i) => (
+                  <option key={i} value={i}>
+                    {i === 0 ? '12:00 AM' : i < 12 ? `${i}:00 AM` : i === 12 ? '12:00 PM' : `${i - 12}:00 PM`}
+                  </option>
+                ))}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 End Time
               </label>
-              <select className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white">
-                <option>5:00 PM</option>
-                <option>4:00 PM</option>
-                <option>6:00 PM</option>
+              <select
+                value={workingHoursEnd}
+                onChange={(e) => setWorkingHoursEnd(Number(e.target.value))}
+                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white"
+              >
+                {Array.from({ length: 24 }, (_, i) => (
+                  <option key={i} value={i}>
+                    {i === 0 ? '12:00 AM' : i < 12 ? `${i}:00 AM` : i === 12 ? '12:00 PM' : `${i - 12}:00 PM`}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

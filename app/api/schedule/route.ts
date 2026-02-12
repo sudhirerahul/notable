@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { scheduleTasks } from '@/lib/scheduler/algorithm'
+import { sendTaskNotification } from '@/lib/integrations/slack'
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -66,7 +67,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Update tasks in database
-    await Promise.all(
+    const updatedTasks = await Promise.all(
       scheduledTasks.map((task) =>
         prisma.task.update({
           where: { id: task.id },
@@ -79,6 +80,24 @@ export async function POST(request: NextRequest) {
         })
       )
     )
+
+    // Send Slack notifications if webhook is configured
+    if (user.settings?.slackWebhookUrl) {
+      try {
+        const successfullyScheduled = updatedTasks.filter(
+          (task) => task.status === 'scheduled'
+        )
+        if (successfullyScheduled.length > 0) {
+          await sendTaskNotification(
+            user.settings.slackWebhookUrl,
+            successfullyScheduled
+          )
+        }
+      } catch (slackError) {
+        console.error('Failed to send Slack notification:', slackError)
+        // Don't fail the entire request if Slack notification fails
+      }
+    }
 
     return NextResponse.json({ scheduledTasks })
   } catch (error) {
