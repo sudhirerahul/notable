@@ -17,10 +17,19 @@ export async function PATCH(
     const { id } = await params
     const body = await request.json()
 
+    // Only allow safe fields to be updated
+    const allowedFields: Record<string, unknown> = {}
+    if (body.title !== undefined) allowedFields.title = body.title
+    if (body.description !== undefined) allowedFields.description = body.description
+    if (body.owner !== undefined) allowedFields.owner = body.owner
+    if (body.dueDate !== undefined) allowedFields.dueDate = body.dueDate ? new Date(body.dueDate) : null
+    if (body.duration !== undefined) allowedFields.duration = body.duration
+    if (body.status !== undefined) allowedFields.status = body.status
+
     const task = await prisma.task.update({
       where: { id },
       data: {
-        ...body,
+        ...allowedFields,
         updatedAt: new Date(),
       },
     })

@@ -101,6 +101,34 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* Time Zone */}
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <h2 className="text-xl font-semibold text-white mb-4">
+            Time Zone
+          </h2>
+          <select
+            value={timeZone}
+            onChange={(e) => setTimeZone(e.target.value)}
+            className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white"
+          >
+            <option value="America/New_York">Eastern Time (ET)</option>
+            <option value="America/Chicago">Central Time (CT)</option>
+            <option value="America/Denver">Mountain Time (MT)</option>
+            <option value="America/Los_Angeles">Pacific Time (PT)</option>
+            <option value="America/Phoenix">Arizona (MST)</option>
+            <option value="America/Anchorage">Alaska (AKT)</option>
+            <option value="Pacific/Honolulu">Hawaii (HST)</option>
+            <option value="Europe/London">London (GMT/BST)</option>
+            <option value="Europe/Paris">Central European (CET)</option>
+            <option value="Europe/Berlin">Berlin (CET)</option>
+            <option value="Asia/Tokyo">Tokyo (JST)</option>
+            <option value="Asia/Shanghai">Shanghai (CST)</option>
+            <option value="Asia/Kolkata">India (IST)</option>
+            <option value="Australia/Sydney">Sydney (AEST)</option>
+            <option value="UTC">UTC</option>
+          </select>
+        </div>
+
         {/* Working Hours */}
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
           <h2 className="text-xl font-semibold text-white mb-4">

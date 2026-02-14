@@ -8,12 +8,20 @@ import { format } from 'date-fns'
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions)
 
+  if (!session?.user?.email) {
+    return <div className="text-gray-400">Please sign in to continue.</div>
+  }
+
   const user = await prisma.user.findUnique({
-    where: { email: session!.user!.email! },
+    where: { email: session.user.email },
   })
 
+  if (!user) {
+    return <div className="text-gray-400">Setting up your account...</div>
+  }
+
   const transcripts = await prisma.transcript.findMany({
-    where: { userId: user!.id },
+    where: { userId: user.id },
     orderBy: { createdAt: 'desc' },
     take: 10,
     include: {
@@ -25,11 +33,18 @@ export default async function DashboardPage() {
 
   const tasks = await prisma.task.findMany({
     where: {
-      userId: user!.id,
+      userId: user.id,
       status: { in: ['pending', 'accepted'] },
     },
     orderBy: { dueDate: 'asc' },
     take: 5,
+  })
+
+  const scheduledTasks = await prisma.task.count({
+    where: {
+      userId: user.id,
+      status: 'scheduled',
+    },
   })
 
   return (
@@ -38,7 +53,7 @@ export default async function DashboardPage() {
         <div>
           <h1 className="text-3xl font-bold text-white">Dashboard</h1>
           <p className="text-gray-400 mt-1">
-            Welcome back, {session!.user!.name}!
+            Welcome back, {session.user.name || 'there'}!
           </p>
         </div>
         <Link
@@ -51,20 +66,24 @@ export default async function DashboardPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid md:grid-cols-3 gap-6">
+      <div className="grid md:grid-cols-4 gap-6">
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
           <div className="text-3xl font-bold text-white">{transcripts.length}</div>
-          <div className="text-gray-400 mt-1">Total Transcripts</div>
-        </div>
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-          <div className="text-3xl font-bold text-emerald-400">{tasks.length}</div>
-          <div className="text-gray-400 mt-1">Pending Tasks</div>
+          <div className="text-gray-400 mt-1">Transcripts</div>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
           <div className="text-3xl font-bold text-cyan-400">
             {transcripts.reduce((acc, t) => acc + t._count.tasks, 0)}
           </div>
-          <div className="text-gray-400 mt-1">Total Tasks Extracted</div>
+          <div className="text-gray-400 mt-1">Tasks Extracted</div>
+        </div>
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <div className="text-3xl font-bold text-amber-400">{tasks.length}</div>
+          <div className="text-gray-400 mt-1">Pending Tasks</div>
+        </div>
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <div className="text-3xl font-bold text-emerald-400">{scheduledTasks}</div>
+          <div className="text-gray-400 mt-1">Scheduled</div>
         </div>
       </div>
 
