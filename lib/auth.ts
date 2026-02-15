@@ -3,20 +3,14 @@ import GoogleProvider from 'next-auth/providers/google'
 import { PrismaAdapter } from '@next-auth/prisma-adapter'
 import { prisma } from './db'
 
-// Get the correct URL for NextAuth based on environment
-const getBaseUrl = () => {
-  if (process.env.NEXTAUTH_URL) return process.env.NEXTAUTH_URL
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`
-  return 'http://localhost:3001'
-}
-
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   debug: process.env.NODE_ENV === 'development',
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      clientId: process.env.GOOGLE_CLIENT_ID || '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+      allowDangerousEmailAccountLinking: true,
       authorization: {
         params: {
           scope: 'openid email profile https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events',
@@ -28,6 +22,7 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async session({ session, user }) {
+      try {
       if (session?.user) {
         session.user.id = user.id
 
@@ -66,8 +61,8 @@ export const authOptions: NextAuthOptions = {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: new URLSearchParams({
-                  client_id: process.env.GOOGLE_CLIENT_ID!,
-                  client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+                  client_id: process.env.GOOGLE_CLIENT_ID || '',
+                  client_secret: process.env.GOOGLE_CLIENT_SECRET || '',
                   grant_type: 'refresh_token',
                   refresh_token: account.refresh_token,
                 }),
@@ -91,13 +86,18 @@ export const authOptions: NextAuthOptions = {
           }
         }
       }
+      } catch (error) {
+        console.error('Error in session callback:', error)
+      }
       return session
     },
   },
   pages: {
     signIn: '/signin',
+    error: '/signin',
   },
   session: {
     strategy: 'database',
   },
+  secret: process.env.NEXTAUTH_SECRET,
 }

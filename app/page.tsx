@@ -12,7 +12,7 @@ export default function Home() {
             <span className="text-2xl font-bold text-white">Notable</span>
           </div>
           <Link
-            href="/api/auth/signin"
+            href="/signin"
             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
           >
             Sign In
@@ -38,7 +38,7 @@ export default function Home() {
 
           <div className="flex justify-center gap-4">
             <Link
-              href="/api/auth/signin"
+              href="/signin"
               className="px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold flex items-center gap-2 transition-colors"
             >
               Get Started

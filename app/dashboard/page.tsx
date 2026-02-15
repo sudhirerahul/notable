@@ -6,46 +6,82 @@ import { FileText, Plus } from 'lucide-react'
 import { format } from 'date-fns'
 
 export default async function DashboardPage() {
-  const session = await getServerSession(authOptions)
+  let session;
+  try {
+    session = await getServerSession(authOptions)
+  } catch (error) {
+    console.error('Error getting session:', error)
+    return (
+      <div className="text-center py-12">
+        <p className="text-gray-400 mb-4">Unable to load session. Please try signing in again.</p>
+        <a href="/signin" className="text-emerald-400 hover:text-emerald-300">Sign In</a>
+      </div>
+    )
+  }
 
   if (!session?.user?.email) {
-    return <div className="text-gray-400">Please sign in to continue.</div>
+    return (
+      <div className="text-center py-12">
+        <p className="text-gray-400 mb-4">Please sign in to continue.</p>
+        <a href="/signin" className="text-emerald-400 hover:text-emerald-300">Sign In</a>
+      </div>
+    )
   }
 
-  const user = await prisma.user.findUnique({
-    where: { email: session.user.email },
-  })
+  let user;
+  let transcripts: any[] = [];
+  let tasks: any[] = [];
+  let scheduledTasks = 0;
 
-  if (!user) {
-    return <div className="text-gray-400">Setting up your account...</div>
-  }
+  try {
+    user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+    })
 
-  const transcripts = await prisma.transcript.findMany({
-    where: { userId: user.id },
-    orderBy: { createdAt: 'desc' },
-    take: 10,
-    include: {
-      _count: {
-        select: { tasks: true },
+    if (!user) {
+      return (
+        <div className="text-center py-12">
+          <p className="text-gray-400 mb-4">Setting up your account... Please refresh in a moment.</p>
+          <a href="/dashboard" className="text-emerald-400 hover:text-emerald-300">Refresh</a>
+        </div>
+      )
+    }
+
+    transcripts = await prisma.transcript.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      include: {
+        _count: {
+          select: { tasks: true },
+        },
       },
-    },
-  })
+    })
 
-  const tasks = await prisma.task.findMany({
-    where: {
-      userId: user.id,
-      status: { in: ['pending', 'accepted'] },
-    },
-    orderBy: { dueDate: 'asc' },
-    take: 5,
-  })
+    tasks = await prisma.task.findMany({
+      where: {
+        userId: user.id,
+        status: { in: ['pending', 'accepted'] },
+      },
+      orderBy: { dueDate: 'asc' },
+      take: 5,
+    })
 
-  const scheduledTasks = await prisma.task.count({
-    where: {
-      userId: user.id,
-      status: 'scheduled',
-    },
-  })
+    scheduledTasks = await prisma.task.count({
+      where: {
+        userId: user.id,
+        status: 'scheduled',
+      },
+    })
+  } catch (error) {
+    console.error('Error loading dashboard data:', error)
+    return (
+      <div className="text-center py-12">
+        <p className="text-gray-400 mb-4">Unable to load dashboard data. Please try again.</p>
+        <a href="/dashboard" className="text-emerald-400 hover:text-emerald-300">Refresh</a>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8">
